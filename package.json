@@ -1,0 +1,26 @@
+{
+  "name": "price-alert-bot",
+  "version": "1.0.0",
+  "description": "DeFi price alert bot for Ethereum tokens",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "dev": "node bot.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.38.4",
+    "axios": "^1.4.0",
+    "ccxt": "^4.5.78",
+    "dotenv": "^16.6.1",
+    "ethers": "^6.17.0",
+    "node-cron": "^3.0.2"
+  },
+  "keywords": [
+    "defi",
+    "alerts",
+    "ethereum",
+    "bot"
+  ],
+  "author": "Wavvy",
+  "license": "MIT"
+}
