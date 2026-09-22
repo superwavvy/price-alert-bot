@@ -1,6 +1,8 @@
 require('dotenv').config();
 const { ethers } = require('ethers');
 const ccxt = require('ccxt');
+// Store previous prices to calculate percentage change
+const previousPrices = {};
 
 // --- 1. Setup Telegram ---
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -37,8 +39,8 @@ const quoter = new ethers.Contract(UNISWAP_V3_QUOTER, V3_QUOTER_ABI, provider);
 
 // --- 4. Watchlists ---
 const WATCHLIST = [
-    { name: "UNI/USD", address: "0xFa7F8980b0f1E64A2062791cc3b0871572f1F7f0", decimals: 18, cexSymbol: "UNI/USDT", dexFee: 3000, priceTarget: 10.00 },
-    { name: "AAVE/USD", address: "0xba5DdD1f9d7F570dc94a51479a000E3BCE967196", decimals: 18, cexSymbol: "AAVE/USDT", dexFee: 3000, priceTarget: 150.00 }
+    { name: "UNI/USD", address: "0xFa7F8980b0f1E64A2062791cc3b0871572f1F7f0", decimals: 18, cexSymbol: "UNI/USDT", dexFee: 3000, priceTarget: 7.50 },
+    { name: "AAVE/USD", address: "0xba5DdD1f9d7F570dc94a51479a000E3BCE967196", decimals: 18, cexSymbol: "AAVE/USDT", dexFee: 3000, priceTarget: 135.00 }
 ];
 
 const STABLE_WATCHLIST = [
@@ -79,7 +81,33 @@ async function checkPrices() {
         const dexPrice = await getDEXPrice(token.address, token.decimals, token.dexFee);
         if (cexPrice && dexPrice) {
             console.log(`${token.name} | Bybit: $${cexPrice.toFixed(2)} | Uniswap V3: $${dexPrice.toFixed(2)}`);
+		
+		// --- NEW: Percentage Change Alert ---
+if (previousPrices[token.name]) {
+    const change = ((cexPrice - previousPrices[token.name]) / previousPrices[token.name]) * 100;
+    const absChange = Math.abs(change);
+    
+    if (absChange > 5) { // Alert if change is greater than 5%
+        const direction = change > 0 ? "📈 UP" : "📉 DOWN";
+        const msg = `${direction} **${token.name} Alert!**\n**Price:** $${cexPrice.toFixed(2)}\n**Change:** ${change.toFixed(2)}%\n**Target:** $${token.priceTarget.toFixed(2)}`;
+        await sendTelegramAlert(msg);
+    }
+}
+// Update the tracker with the current price
+previousPrices[token.name] = cexPrice;
 
+// --- NEW: Prevent Target Spam ---
+if (!previousPrices[token.name + "_alerted"] && cexPrice >= token.priceTarget) {
+    const msg = `🎯 **Absolute Price Target Hit!**\n**Asset:** ${token.cexSymbol}\n**Target:** $${token.priceTarget.toFixed(2)}\n**Current:** $${cexPrice.toFixed(2)}`;
+    await sendTelegramAlert(msg);
+    
+    // Mark as alerted so it doesn't spam every 2 hours
+    previousPrices[token.name + "_alerted"] = true;
+    
+    // Reset the alert if the price drops back below the target
+} else if (previousPrices[token.name + "_alerted"] && cexPrice < token.priceTarget) {
+    previousPrices[token.name + "_alerted"] = false;
+}
             // Absolute Price Target Alert
             if (cexPrice >= token.priceTarget) {
                 const msg = `🎯 **Absolute Price Target Hit!**\n**Asset:** ${token.name}\n**Target:** $${token.priceTarget.toFixed(2)}\n**Current (Bybit):** $${cexPrice.toFixed(2)}`;
@@ -90,7 +118,7 @@ async function checkPrices() {
             const spread = ((cexPrice - dexPrice) / dexPrice) * 100;
             if (Math.abs(spread) > 0.5) {
                 const direction = spread > 0 ? "CEX higher" : "DEX higher";
-                const msg = `🚨 **CEX/DEX Spread Alert!**\n**Asset:** ${token.cexSymbol}/USDT\n**Bybit:** $${cexPrice.toFixed(2)}\n**Uniswap V3:** $${dexPrice.toFixed(2)}\n**Spread:** ${spread.toFixed(2)}% (${direction})`;
+                const msg = `🚨 **CEX/DEX Spread Alert!**\n**Asset:** ${token.cexSymbol}\n**Bybit:** $${cexPrice.toFixed(2)}\n**Uniswap V3:** $${dexPrice.toFixed(2)}\n**Spread:** ${spread.toFixed(2)}% (${direction})`;
                await sendTelegramAlert(msg);
             }
         }
